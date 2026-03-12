@@ -1,8 +1,17 @@
 import path from "path";
 import fs from "fs";
 
+/** Environment configuration object with proper typing */
+interface EnvironmentConfig {
+    discord_token: string | undefined;
+    topggToken: string | undefined;
+    domainUrl: string | undefined;
+    topgg_webhook: string | undefined;
+    webhook_url: string | undefined;
+}
+
 // Environment configuration
-export const ENV = {
+export const ENV: EnvironmentConfig = {
     discord_token: process.env.DISCORD_TOKEN,
     topggToken: process.env.TOPGG_TOKEN,
     domainUrl: process.env.DOMAIN_URL,
@@ -16,18 +25,22 @@ export const TOPGG_API_TOKEN = ENV.topggToken;
 export const TOPGG_WEBHOOK = ENV.topgg_webhook;
 export const WEBHOOK_URL = ENV.webhook_url;
 export const DOMAIN_URL = ENV.domainUrl;
-export const EMBED_COLOUR = 5793266;
+export const EMBED_COLOUR: number = 5793266;
 
 // Paths
-export const DATA_DIR = path.join(process.cwd(), "data");
-export const DB_PATH = path.join(DATA_DIR, "data.db");
-export const PREVIEW_PATH = path.join(DATA_DIR, "cache", "preview");
-export const NO_PLOT_DIR = path.join(DATA_DIR, "cache", "no_plot");
-export const PLOT_DIR = path.join(DATA_DIR, "cache", "plot");
-export const PLOT_OVERLAY_PATH = path.join(process.cwd(), "static", "plot.png");
+export const DATA_DIR: string = path.join(process.cwd(), "data");
+export const DB_PATH: string = path.join(DATA_DIR, "data.db");
+export const PREVIEW_PATH: string = path.join(DATA_DIR, "cache", "preview");
+export const NO_PLOT_DIR: string = path.join(DATA_DIR, "cache", "no_plot");
+export const PLOT_DIR: string = path.join(DATA_DIR, "cache", "plot");
+export const PLOT_OVERLAY_PATH: string = path.join(
+    process.cwd(),
+    "static",
+    "plot.png",
+);
 
 // Ensure directories exist
-[DATA_DIR, PREVIEW_PATH].forEach((dir) => {
+[DATA_DIR, PREVIEW_PATH].forEach((dir: string) => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }

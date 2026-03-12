@@ -14,6 +14,17 @@ const topggLimiter = rateLimit({
     legacyHeaders: false,
 });
 
+/** Top.gg webhook payload structure */
+interface TopGgWebhookPayload {
+    type: string;
+    data?: {
+        user?: {
+            platform_id?: string;
+            id?: string;
+        };
+    };
+}
+
 /**
  * Verifies Top.gg webhook signature (V2)
  * HMAC_SHA256(secret, timestamp + '.' + raw_body)
@@ -60,29 +71,34 @@ voteRouter.post(
     topggLimiter,
     // Use raw parser only for this route
     raw({ type: "application/json" }),
-    async (req: Request, res: Response) => {
+    async (req: Request, res: Response): Promise<void> => {
         const secret = TOPGG_WEBHOOK;
         const signature = req.header("x-topgg-signature");
 
         if (!secret || !signature) {
-            return res.status(401).send("Unauthorized");
+            res.status(401).send("Unauthorized");
+            return;
         }
 
         const rawBody = req.body as Buffer;
 
         if (!verifySignature(secret, rawBody, signature)) {
-            return res.status(401).send("Unauthorized");
+            res.status(401).send("Unauthorized");
+            return;
         }
 
-        let payload: any;
+        let payload: unknown;
         try {
             payload = JSON.parse(rawBody.toString("utf8"));
         } catch {
-            return res.status(400).send("Bad Request");
+            res.status(400).send("Bad Request");
+            return;
         }
 
-        if (!payload?.type) {
-            return res.status(400).send("Bad Request");
+        // Type guard for the payload
+        if (!isTopGgWebhookPayload(payload)) {
+            res.status(400).send("Bad Request");
+            return;
         }
 
         const eventType = payload.type;
@@ -92,7 +108,8 @@ voteRouter.post(
             const userId = data?.user?.platform_id;
 
             if (!userId) {
-                return res.status(400).send("Bad Request");
+                res.status(400).send("Bad Request");
+                return;
             }
 
             console.info(`Top.gg Vote: ${userId}`);
@@ -106,8 +123,15 @@ voteRouter.post(
             console.info(`Top.gg Webhook Test: ${userId}`);
         }
 
-        return res.sendStatus(200);
+        res.sendStatus(200);
     },
 );
+
+/** Type guard to validate Top.gg webhook payload structure */
+function isTopGgWebhookPayload(value: unknown): value is TopGgWebhookPayload {
+    if (typeof value !== "object" || value === null) return false;
+    const obj = value as Record<string, unknown>;
+    return typeof obj.type === "string";
+}
 
 export default voteRouter;

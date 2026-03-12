@@ -7,6 +7,7 @@ import {
 import rateLimit from "express-rate-limit";
 import { generateImageData } from "../services/image.js";
 import { getImageHash } from "../../database.js";
+import { getStringQueryParam, parseBoolString } from "../../type-guards.js";
 
 const imageRouter = Router();
 
@@ -44,7 +45,7 @@ interface ImgHashParams {
 imageRouter.get("/image/:hexCode", imageLimiter, (async (
     req: Request<HexCodeParams>,
     res: Response,
-) => {
+): Promise<void> => {
     const raw = stripExtension(req.params.hexCode);
     const code = raw.toLowerCase();
 
@@ -54,8 +55,8 @@ imageRouter.get("/image/:hexCode", imageLimiter, (async (
     }
 
     try {
-        const plotArg = (req.query["plot"] as string) ?? "";
-        const png = await generateImageData({ code, plotArg });
+        const plotParam = getStringQueryParam(req.query["plot"]) ?? "";
+        const png = await generateImageData({ code, plotArg: plotParam });
 
         res.setHeader("Content-Type", "image/png");
         res.setHeader("Cache-Control", "public, max-age=86400, immutable");
@@ -73,7 +74,7 @@ imageRouter.get("/image/:hexCode", imageLimiter, (async (
 imageRouter.get("/image_large/:imgHash", imageLimiter, (async (
     req: Request<ImgHashParams>,
     res: Response,
-) => {
+): Promise<void> => {
     const raw = stripExtension(req.params.imgHash);
 
     if (!/^[0-9a-f]{64}$/.test(raw)) {
@@ -90,9 +91,9 @@ imageRouter.get("/image_large/:imgHash", imageLimiter, (async (
 
         const [size, key] = result;
         const code = key.toLowerCase();
-        const plotArg = (req.query["plot"] as string) ?? "";
+        const plotParam = getStringQueryParam(req.query["plot"]) ?? "";
 
-        const png = await generateImageData({ code, plotArg, size });
+        const png = await generateImageData({ code, plotArg: plotParam, size });
 
         res.setHeader("Content-Type", "image/png");
         res.setHeader("Cache-Control", "public, max-age=86400, immutable");

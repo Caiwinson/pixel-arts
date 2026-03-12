@@ -43,7 +43,9 @@ export function createClosedCanvasView(): ActionRowBuilder<ButtonBuilder>[] {
 
 // Download button
 
-export async function downloadButtonExecute(interaction: ButtonInteraction) {
+export async function downloadButtonExecute(
+    interaction: ButtonInteraction,
+): Promise<void> {
     const url = interaction.message.embeds?.[0]?.image?.url;
 
     if (!url) {
@@ -91,7 +93,9 @@ export async function downloadButtonExecute(interaction: ButtonInteraction) {
 }
 
 // Timelapse button
-export async function timelapseButtonExecute(interaction: ButtonInteraction) {
+export async function timelapseButtonExecute(
+    interaction: ButtonInteraction,
+): Promise<void> {
     try {
         // Fetch canvas history for this message / user
         const history = await getCanvasHistory(interaction.message.id);

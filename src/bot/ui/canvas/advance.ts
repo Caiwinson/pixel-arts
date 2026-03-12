@@ -101,7 +101,7 @@ function createRowOptions(
     type: "x" | "y",
     size: number,
     default_num: number = 1,
-) {
+): StringSelectMenuOptionBuilder[] {
     const options: StringSelectMenuOptionBuilder[] = [];
     const emoji = type === "x" ? "🇽" : "🇾";
     for (let i = 1; i <= size; i++) {
@@ -123,7 +123,7 @@ export async function createAdvanceCanvasView(
     defaultHex: string,
     extraColours: string[] = [],
     showsTool: boolean = true,
-) {
+): Promise<ActionRowBuilder<StringSelectMenuBuilder | ButtonBuilder>[]> {
     // X SELECT MENU
     const xMenu = new StringSelectMenuBuilder()
         .setCustomId("sel:x")
@@ -184,7 +184,7 @@ export async function createAdvanceCanvasView(
 
 export async function rowOptionsExecute(
     interaction: StringSelectMenuInteraction,
-) {
+): Promise<void> {
     const type = interaction.customId.split(":")[1];
     const msgId = interaction.message.id;
     const userId = interaction.user.id;
@@ -205,7 +205,16 @@ export async function rowOptionsExecute(
     await interaction.deferUpdate();
 }
 
-export async function parseCanvasState(messageId: Message) {
+/** Canvas state extracted from message embed */
+interface CanvasState {
+    key: string;
+    size: number;
+    showsPlot: boolean;
+}
+
+export async function parseCanvasState(
+    messageId: Message,
+): Promise<CanvasState | null> {
     // Safely get URL from embed
     const url = messageId.embeds?.[0]?.image?.url;
     if (!url) return null; // no image, abort
@@ -221,7 +230,9 @@ export async function parseCanvasState(messageId: Message) {
     return { key, size, showsPlot };
 }
 
-export async function placePixelExecute(interaction: ButtonInteraction) {
+export async function placePixelExecute(
+    interaction: ButtonInteraction,
+): Promise<void> {
     const canvasState = await parseCanvasState(interaction.message);
     if (!canvasState) return;
 
@@ -273,8 +284,10 @@ export async function placePixelExecute(interaction: ButtonInteraction) {
     );
 }
 
-export async function toggleToolExecute(interaction: ButtonInteraction) {
-    const allowed = ensureOwner(
+export async function toggleToolExecute(
+    interaction: ButtonInteraction,
+): Promise<void> {
+    const allowed = await ensureOwner(
         interaction,
         interaction.message,
         "You cannot toggle tools on this canvas.",

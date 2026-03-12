@@ -18,6 +18,7 @@ import {
 import { createColourMenu, getColourList } from "./colour.js";
 import { recordPixelUpdate, getUserColour } from "../../../database.js";
 import { parseCanvasState } from "../canvas/advance.js";
+import type { Coordinate, ToolModalResult } from "../../../types.js";
 
 export function createToolMenu(
     showsTool: boolean = false,
@@ -60,7 +61,10 @@ export function createToolMenu(
     return menu;
 }
 
-const toolMap: Record<string, any> = {
+/** Type for tool handler functions */
+type ToolHandler = (interaction: StringSelectMenuInteraction) => Promise<void>;
+
+const toolMap: Record<string, ToolHandler> = {
     line: handleLine,
     rectangle: handleRectangle,
     outline: handleRectangleOutline,
@@ -69,7 +73,9 @@ const toolMap: Record<string, any> = {
     plot: handlePlot,
 };
 
-export async function toolExecute(interaction: StringSelectMenuInteraction) {
+export async function toolExecute(
+    interaction: StringSelectMenuInteraction,
+): Promise<void> {
     const tool = interaction.values[0]!;
     const handler = toolMap[tool];
     if (handler) await handler(interaction);
@@ -80,7 +86,7 @@ async function createToolModal(
     title: string,
     interaction: StringSelectMenuInteraction,
     size: number,
-) {
+): Promise<ModalBuilder> {
     const colourList = getColourList(
         getStringSelectById(interaction.message, "cc:advanced")!,
     );
@@ -124,10 +130,7 @@ async function createToolModal(
     return modal;
 }
 
-export function parseCoords(
-    coordStr: string,
-    size: number,
-): [number, number] | null {
+export function parseCoords(coordStr: string, size: number): Coordinate | null {
     const parts = coordStr.split(",");
     if (parts.length !== 2) return null;
 
@@ -152,7 +155,9 @@ async function executeToolModal(
     title: string,
     interaction: StringSelectMenuInteraction,
     size: number,
-) {
+): Promise<
+    (ToolModalResult & { submitted: ModalSubmitInteraction }) | undefined
+> {
     const id = Math.floor(Math.random() * 1_000_000);
     const modal = await createToolModal(id, title, interaction, size);
     await interaction.showModal(modal);
@@ -193,7 +198,7 @@ async function updateCanvas(
     key: string,
     deltas: string[],
     showsPlot: boolean,
-) {
+): Promise<void> {
     const embeds = await createCanvasEmbed(key, showsPlot);
 
     await submitted.editReply({
@@ -215,7 +220,7 @@ function setPixel(
     y: number,
     colour: string,
     deltas: string[],
-) {
+): void {
     if (x < 0 || y < 0 || x >= size || y >= size) return;
 
     const idx = y * size + x;
@@ -223,7 +228,9 @@ function setPixel(
     deltas.push(`${idx}:${colour}`);
 }
 
-async function handleLine(interaction: StringSelectMenuInteraction) {
+async function handleLine(
+    interaction: StringSelectMenuInteraction,
+): Promise<void> {
     const canvasState = await parseCanvasState(interaction.message);
     if (!canvasState) return; // exit if null
 
@@ -272,7 +279,9 @@ async function handleLine(interaction: StringSelectMenuInteraction) {
     await updateCanvas(submitted, newKey, deltas, showsPlot);
 }
 
-async function handleRectangle(interaction: StringSelectMenuInteraction) {
+async function handleRectangle(
+    interaction: StringSelectMenuInteraction,
+): Promise<void> {
     const canvasState = await parseCanvasState(interaction.message);
     if (!canvasState) return;
 
@@ -309,7 +318,7 @@ async function handleRectangle(interaction: StringSelectMenuInteraction) {
 
 async function handleRectangleOutline(
     interaction: StringSelectMenuInteraction,
-) {
+): Promise<void> {
     const canvasState = await parseCanvasState(interaction.message);
     if (!canvasState) return;
 

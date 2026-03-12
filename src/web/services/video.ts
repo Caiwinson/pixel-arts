@@ -2,11 +2,9 @@ import path from "path";
 import fs from "fs";
 import { spawn } from "child_process";
 import { PREVIEW_PATH } from "../../constants.js";
+import type { ImageGenerationResult } from "../../types.js";
 
-export interface VideoResult {
-    outputPath: string | null;
-    error: string | null;
-}
+export type VideoResult = ImageGenerationResult;
 
 /**
  * Validates that value is a pure numeric ID (5–20 digits) and returns the
@@ -74,15 +72,16 @@ export async function generateDownloadVideo(
 
     try {
         await runFfmpeg(inputPath, outputPath, fps, speed);
-    } catch (err: any) {
-        if (err.message === "timeout") {
+    } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        if (errorMessage === "timeout") {
             console.error(
                 `Video processing timeout for ${cleanId} at speed ${speed}`,
             );
             return { outputPath: null, error: "Video processing timeout" };
         }
         console.error(
-            `Error generating video for ${cleanId} at speed ${speed}: ${err}`,
+            `Error generating video for ${cleanId} at speed ${speed}: ${errorMessage}`,
         );
         return { outputPath: null, error: "Error generating video" };
     }

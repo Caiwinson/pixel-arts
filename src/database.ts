@@ -1,5 +1,11 @@
 import { Pool } from "pg";
 import crypto from "crypto";
+import type {
+    ImageHashResult,
+    UserColourRecord,
+    VoteRecord,
+    EmojiRecord,
+} from "./types.js";
 
 const pool = new Pool({
     host: process.env.POSTGRES_HOST ?? "db",
@@ -252,9 +258,7 @@ export async function saveImageHash(
     return hash;
 }
 
-export async function getImageHash(
-    hash: string,
-): Promise<[number, string] | null> {
+export async function getImageHash(hash: string): Promise<ImageHashResult> {
     const result = await pool.query<{ key: string }>(
         `SELECT key FROM image_hash WHERE hash = $1`,
         [hash],
