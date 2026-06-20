@@ -1,6 +1,5 @@
-import { createCanvas, loadImage } from "@napi-rs/canvas";
 import * as crypto from "crypto";
-import { NO_PLOT_DIR, PLOT_DIR, PLOT_OVERLAY_PATH } from "../../constants.js";
+import { NO_PLOT_DIR, PLOT_DIR } from "../../constants.js";
 import { getCachedImage, storeImageInCache } from "./cache.js";
 import { sendWebhookMessage } from "./webhook.js";
 import { execFile } from "child_process";
@@ -8,11 +7,24 @@ import { execFile } from "child_process";
 const PIXEL_RENDER_BIN =
     process.env.PIXEL_RENDER_BIN ?? "/usr/local/bin/pixel-render";
 
-function hexStringToCanvas(code: string, size: number): Promise<Buffer> {
+/**
+ * Calls the Rust pixel-render binary. When `plot` is true, the overlay
+ * grid is composited in Rust (it's baked into the binary at compile time)
+ * before the single PNG encode — no separate canvas compositing pass on
+ * the Node side anymore.
+ */
+function hexStringToCanvas(
+    code: string,
+    size: number,
+    plot: boolean,
+): Promise<Buffer> {
     return new Promise((resolve, reject) => {
+        const args = [code, String(size)];
+        if (plot) args.push("plot");
+
         execFile(
             PIXEL_RENDER_BIN,
-            [code, String(size)],
+            args,
             // `encoding: "buffer"` means stdout comes back as a raw Buffer,
             // not a UTF-8 string — important for binary PNG data.
             { encoding: "buffer", maxBuffer: 10 * 1024 * 1024 }, // 10 MB max
@@ -31,30 +43,6 @@ function hexStringToCanvas(code: string, size: number): Promise<Buffer> {
     });
 }
 
-const overlayImg = await loadImage(PLOT_OVERLAY_PATH);
-
-/**
- * Overlay the plot grid on top of a base PNG buffer.
- * Equivalent to img.paste(PLOT_OVERLAY, (0,0), PLOT_OVERLAY).
- */
-async function applyPlotOverlay(basePng: Buffer): Promise<Buffer> {
-    const baseImg = await loadImage(basePng);
-
-    const canvas = createCanvas(baseImg.width, baseImg.height);
-    const ctx = canvas.getContext("2d");
-
-    // Flatten to pure RGB by painting a white background first (eliminates alpha channel)
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, baseImg.width, baseImg.height);
-
-    ctx.drawImage(baseImg, 0, 0);
-    ctx.drawImage(overlayImg, 0, 0);
-
-    const rawPng = canvas.toBuffer("image/png");
-
-    return rawPng;
-}
-
 export interface GenerateImageOptions {
     code: string;
     plotArg?: string;
@@ -64,6 +52,11 @@ export interface GenerateImageOptions {
 /**
  * Generate (or retrieve from cache) a PNG buffer for the given pixel art code.
  * Mirrors generate_image_data() in image_service.py.
+ *
+ * Base and plotted images are still cached separately (NO_PLOT_DIR / PLOT_DIR)
+ * since they're requested independently and a plot toggle shouldn't evict
+ * the base image's cache entry. Both are now rendered fully in Rust —
+ * there's no Node-side compositing step.
  */
 export async function generateImageData(
     opts: GenerateImageOptions,
@@ -80,7 +73,7 @@ export async function generateImageData(
 
     if (!basePng) {
         console.info(`Generating base image for hash: ${imgHash}`);
-        basePng = await hexStringToCanvas(code, size); // ← await added
+        basePng = await hexStringToCanvas(code, size, false);
         storeImageInCache(NO_PLOT_DIR, imgHash, basePng);
         sendWebhookMessage(size <= 15 ? code : imgHash);
     }
@@ -95,7 +88,7 @@ export async function generateImageData(
 
     if (!plottedPng) {
         console.info(`Generating plotted image for hash: ${imgHash}`);
-        plottedPng = await applyPlotOverlay(basePng);
+        plottedPng = await hexStringToCanvas(code, size, true);
         storeImageInCache(PLOT_DIR, imgHash, plottedPng);
     }
 

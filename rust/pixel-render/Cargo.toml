@@ -6,6 +6,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# `png` is the only dependency — it encodes raw pixel data into a PNG file.
-# We don't need a canvas library at all. We build the pixels ourselves.
+# `png` handles both encoding (final output) and decoding (the baked-in
+# plot.png overlay, decoded once via OnceLock at first use).
 png = "0.17"
