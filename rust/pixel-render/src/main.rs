@@ -12,9 +12,7 @@ use std::sync::OnceLock;
 // (static/plot.png) is the source of truth — this binary just carries
 // its own copy so it has no runtime file dependency.
 //
-// Path is relative to this source file: rust/pixel-render/src/main.rs
-// -> ../../../static/plot.png
-static OVERLAY_PNG_BYTES: &[u8] = include_bytes!("../../../static/plot.png");
+static OVERLAY_PNG_BYTES: &[u8] = include_bytes!("../assets/plot.png");
 
 struct OverlayImage {
     width: usize,
