@@ -3,6 +3,7 @@ import path from "path";
 import imageRouter from "./routes/image.js";
 import videoRouter from "./routes/video.js";
 import voteRouter from "./routes/vote.js";
+import internalRouter from "./routes/internal.js";
 
 // Rate limiting for expensive routes
 import rateLimit from "express-rate-limit";
@@ -22,6 +23,7 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use("/", imageRouter);
 app.use("/", videoRouter);
 app.use("/", voteRouter)
+app.use("/", internalRouter);
 
 app.get("/timelapse/:code", timelapseLimiter, (req, res) => {
     // Serve timelapse.html from ./public

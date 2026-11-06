@@ -42,16 +42,24 @@ This repository is a complete migration from Python to TypeScript, rebuilt from 
 
     The `.env` file requires the following variables:
 
-    | Variable            | Description                                                   |
-    | ------------------- | ------------------------------------------------------------- |
-    | `DISCORD_TOKEN`     | Bot token from the Discord Developer Portal                   |
-    | `TOPGG_TOKEN`       | Top.gg API token for posting server stats                     |
-    | `TOPGG_WEBHOOK`     | Webhook secret for verifying vote payloads                    |
-    | `WEBHOOK_URL`       | _(Optional)_ Discord webhook for logging new canvases         |
-    | `DOMAIN_URL`        | Public-facing base URL of the web service (no trailing slash) |
-    | `POSTGRES_USER`     | PostgreSQL username                                           |
-    | `POSTGRES_PASSWORD` | PostgreSQL password                                           |
-    | `POSTGRES_DB`       | PostgreSQL database name                                      |
+    | Variable              | Description                                                                          |
+    | --------------------- | ------------------------------------------------------------------------------------ |
+    | `DISCORD_TOKEN`       | Bot token from the Discord Developer Portal                                          |
+    | `TOPGG_TOKEN`         | Top.gg API token for posting server stats                                            |
+    | `TOPGG_WEBHOOK`       | Webhook secret for verifying vote payloads                                           |
+    | `WEBHOOK_URL`         | _(Optional)_ Discord webhook for logging new canvases                                |
+    | `DOMAIN_URL`          | Public-facing base URL of the web service (no trailing slash)                        |
+    | `INTERNAL_API_SECRET` | Shared secret the bot uses to sign requests to the web service (must match on both)  |
+    | `INTERNAL_URL`        | _(Optional)_ URL the bot uses to reach the web service. Default: `http://web:8080`   |
+    | `POSTGRES_USER`       | PostgreSQL username                                                                  |
+    | `POSTGRES_PASSWORD`   | PostgreSQL password                                                                  |
+    | `POSTGRES_DB`         | PostgreSQL database name                                                             |
+
+    Generate the internal secret with:
+
+    ```bash
+    openssl rand -hex 32
+    ```
 
 2. Create a `docker-compose.yml` file:
 
@@ -96,13 +104,9 @@ This repository is a complete migration from Python to TypeScript, rebuilt from 
             env_file: .env
             environment:
                 APP_MODE: bot
-            volumes:
-                - ./data:/app/data
             depends_on:
                 db:
                     condition: service_healthy
-                web:
-                    condition: service_started
     ```
 
 3. Start all services:
@@ -134,6 +138,48 @@ npm start
 5. **Undo** — Undo your last placement (up to 3 times per minute).
 6. **Close & Timelapse** — Close the canvas and press **Timelapse** to generate a replay video.
 7. **Recreate** — Use `/recreate` to turn any image into an editable canvas _(vote required)_.
+
+## Architecture
+
+Pixel Arts runs as two services from the same image, selected by `APP_MODE`:
+
+| Service | `APP_MODE` | Responsibility                                                          |
+| ------- | ---------- | ----------------------------------------------------------------------- |
+| `bot`   | `bot`      | Discord interactions, canvas state, votes                               |
+| `web`   | `web`      | Image rendering, timelapse rendering, downloads, Top.gg vote webhook    |
+
+### Timelapse generation
+
+Timelapse videos are rendered by the web service only. When a user presses
+**Timelapse**, the bot sends a signed request to the web service's internal
+endpoint, which renders the video (if it doesn't exist yet) and returns the
+frame count.
+
+- Requests are authenticated with an HMAC-SHA256 signature over
+  `timestamp.messageId` using `INTERNAL_API_SECRET`, with a 30 second validity
+  window.
+- If `INTERNAL_API_SECRET` is not set on the web service, the endpoint is
+  disabled.
+- The public routes (`/download`, `/preview`, `/canvas-history`) only serve
+  videos that already exist and can never start a new render.
+- Renders are limited to 2 at a time, de-duplicated per canvas, and written
+  atomically so partial files are never served.
+
+### Running the services on separate machines
+
+The bot and web services can run on different machines. Connect them over a
+private network (e.g. Tailscale or WireGuard) and:
+
+1. Set `INTERNAL_API_SECRET` to the same value on both machines.
+2. On the bot machine, set `INTERNAL_URL=http://<web-private-ip>:8080`.
+3. On the web machine, set `POSTGRES_HOST=<db-private-ip>`.
+4. Set `DOMAIN_URL` to the public URL on both machines.
+5. Bind PostgreSQL to the private interface only, and don't expose `/internal`
+   through your public reverse proxy.
+6. Only the web machine needs the `./data` volume.
+
+Run a single web instance, or share the `data` volume between instances.
+Rendered videos and caches are stored on local disk.
 
 ## Links
 

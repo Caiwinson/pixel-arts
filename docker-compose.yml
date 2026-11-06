@@ -38,10 +38,6 @@ services:
         env_file: .env
         environment:
             APP_MODE: bot
-        volumes:
-            - ./data:/app/data
         depends_on:
             db:
                 condition: service_healthy
-            web:
-                condition: service_started

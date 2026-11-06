@@ -1,22 +1,15 @@
 import path from "path";
 import fs from "fs";
 
-/** Environment configuration object with proper typing */
-interface EnvironmentConfig {
-    discord_token: string | undefined;
-    topggToken: string | undefined;
-    domainUrl: string | undefined;
-    topgg_webhook: string | undefined;
-    webhook_url: string | undefined;
-}
-
 // Environment configuration
-export const ENV: EnvironmentConfig = {
+export const ENV = {
     discord_token: process.env.DISCORD_TOKEN,
     topggToken: process.env.TOPGG_TOKEN,
     domainUrl: process.env.DOMAIN_URL,
     topgg_webhook: process.env.TOPGG_WEBHOOK,
     webhook_url: process.env.WEBHOOK_URL,
+    internalApiSecret: process.env.INTERNAL_API_SECRET,
+    internalUrl: process.env.INTERNAL_URL ?? "http://web:8080",
 };
 
 // Individual constants for convenience
@@ -25,8 +18,9 @@ export const TOPGG_API_TOKEN = ENV.topggToken;
 export const TOPGG_WEBHOOK = ENV.topgg_webhook;
 export const WEBHOOK_URL = ENV.webhook_url;
 export const DOMAIN_URL = ENV.domainUrl;
-export const EMBED_COLOUR: number = 5793266;
-
+export const INTERNAL_API_SECRET = ENV.internalApiSecret;
+export const INTERNAL_URL = ENV.internalUrl;
+export const EMBED_COLOUR = 5793266;
 // Paths
 export const DATA_DIR: string = path.join(process.cwd(), "data");
 export const DB_PATH: string = path.join(DATA_DIR, "data.db");
@@ -35,7 +29,7 @@ export const NO_PLOT_DIR: string = path.join(DATA_DIR, "cache", "no_plot");
 export const PLOT_DIR: string = path.join(DATA_DIR, "cache", "plot");
 
 // Ensure directories exist
-[DATA_DIR, PREVIEW_PATH].forEach((dir: string) => {
+[DATA_DIR, PREVIEW_PATH, NO_PLOT_DIR, PLOT_DIR].forEach((dir: string) => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }

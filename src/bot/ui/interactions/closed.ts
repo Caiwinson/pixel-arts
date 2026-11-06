@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import {
     ActionRowBuilder,
     AttachmentBuilder,
@@ -9,13 +10,11 @@ import {
     StringSelectMenuInteraction,
     StringSelectMenuOptionBuilder,
 } from "discord.js";
-import { getCanvasHistory, type CanvasHistoryRow } from "../../../database.js";
-import { spawn } from "child_process";
-import path from "path";
-import fs from "fs";
-import { DOMAIN_URL, PREVIEW_PATH } from "../../../constants.js";
-import { get } from "http";
-import { getCanvasKey } from "../../utils.js";
+import {
+    DOMAIN_URL,
+    INTERNAL_API_SECRET,
+    INTERNAL_URL,
+} from "../../../constants.js";
 
 const TIMELAPSE_RENDER_BIN =
     process.env.TIMELAPSE_RENDER_BIN ?? "/usr/local/bin/timelapse-render";
@@ -92,85 +91,57 @@ export async function downloadButtonExecute(
     });
 }
 
-// Timelapse button
-export async function timelapseButtonExecute(
-    interaction: ButtonInteraction,
-): Promise<void> {
-    try {
-        // Fetch canvas history for this message / user
-        const history = await getCanvasHistory(interaction.message.id);
+/** Asks the web service to render the timelapse. Returns the frame count. */
+async function requestTimelapse(messageId: string): Promise<number> {
+    if (!INTERNAL_API_SECRET) {
+        throw new Error("INTERNAL_API_SECRET is not configured");
+    }
 
-        if (!history || history.length === 0) {
-            await interaction.reply({
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = crypto
+        .createHmac("sha256", INTERNAL_API_SECRET)
+        .update(`${timestamp}.${messageId}`)
+        .digest("hex");
+
+    const res = await fetch(`${INTERNAL_URL}/internal/timelapse/${messageId}`, {
+        method: "POST",
+        headers: {
+            "x-timestamp": timestamp,
+            "x-signature": signature,
+        },
+        signal: AbortSignal.timeout(150_000),
+    });
+
+    if (res.status === 404) throw new Error("NO_HISTORY");
+    if (!res.ok) throw new Error(`Web service responded ${res.status}`);
+
+    const data = (await res.json()) as { frames: number };
+    return data.frames;
+}
+
+export async function timelapseButtonExecute(interaction: ButtonInteraction) {
+    // Rendering can exceed Discord's 3s window, so acknowledge first
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+        const frames = await requestTimelapse(interaction.message.id);
+
+        await interaction.editReply({
+            content: `Here’s your [timelapse](${DOMAIN_URL}/download/${interaction.message.id}-1) video!`,
+            components: createTimelapseView(interaction.message.id, frames),
+        });
+    } catch (err: any) {
+        if (err?.message === "NO_HISTORY") {
+            await interaction.editReply({
                 content: "No canvas history found for timelapse.",
-                flags: MessageFlags.Ephemeral,
             });
             return;
         }
-
-        const previewPath = path.join(
-            PREVIEW_PATH,
-            `${interaction.message.id}.mp4`,
-        );
-
-        // if file didnt exist
-        if (!fs.existsSync(previewPath)) {
-            // Generate video
-            await generateTimelapseVideo(history, previewPath);
-        }
-
-        // Send video
-        await interaction.reply({
-            content: `Here’s your [timelapse](${DOMAIN_URL}/download/${interaction.message.id}-1) video!`,
-            components: createTimelapseView(
-                interaction.message.id,
-                history.length,
-            ),
-            flags: MessageFlags.Ephemeral,
-        });
-    } catch (err) {
         console.error(err);
         await interaction.editReply({
             content: "Failed to generate timelapse video.",
         });
     }
-}
-
-export async function generateTimelapseVideo(
-    history: CanvasHistoryRow[],
-    previewPath: string,
-): Promise<void> {
-    if (!history.length) throw new Error("No history");
-
-    await new Promise<void>((resolve, reject) => {
-        const proc = spawn(TIMELAPSE_RENDER_BIN, [previewPath], {
-            // Pipe stdin so we can write JSON history to it.
-            // stdout/stderr inherit so errors show in your logs.
-            stdio: ["pipe", "inherit", "inherit"],
-        });
-
-        proc.on("error", (err) => {
-            reject(
-                new Error(`timelapse-render failed to start: ${err.message}`),
-            );
-        });
-
-        proc.on("close", (code) => {
-            if (code === 0) {
-                resolve();
-            } else {
-                reject(new Error(`timelapse-render exited with code ${code}`));
-            }
-        });
-
-        // Write the history JSON and close stdin so the binary sees EOF
-        // and starts processing. This is equivalent to piping:
-        //   echo '[...]' | timelapse-render output.mp4
-        proc.stdin!.write(JSON.stringify(history), (err) => {
-            if (err) reject(err);
-        });
-        proc.stdin!.end();
-    });
 }
 
 function timeframe(duration: number): string {
