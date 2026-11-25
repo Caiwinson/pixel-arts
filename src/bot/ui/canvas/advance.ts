@@ -15,7 +15,7 @@ import {
     getCanvasKey,
     getStringSelectById,
 } from "../../utils.js";
-import { recordPixelUpdate, getUserColour } from "../../../database.js";
+import { applyPixelUpdate, getUserColour } from "../../../database.js";
 import { createToolMenu } from "../interactions/tools.js";
 
 type PixelSelection = {
@@ -259,8 +259,12 @@ export async function placePixelExecute(
     const toolsEnabled = !getStringSelectById(interaction.message, "tool")
         ?.disabled;
 
-    const newKey =
-        keyStr.slice(0, num * 6) + colour + keyStr.slice(num * 6 + 6);
+    const newKey = await applyPixelUpdate(
+        interaction.message.id,
+        [`${num}:${colour}`],
+        interaction.user.id,
+        keyStr,
+    );
 
     const embeds = await createCanvasEmbed(newKey, showsPlot);
 
@@ -276,12 +280,6 @@ export async function placePixelExecute(
         ),
     });
 
-    await recordPixelUpdate(
-        interaction.message.id,
-        newKey,
-        `${num}:${colour}`,
-        interaction.user.id,
-    );
 }
 
 export async function toggleToolExecute(

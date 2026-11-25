@@ -84,6 +84,7 @@ export async function recordPixelUpdate(
     const client = await pool.connect();
     try {
         await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [messageId]);
 
         const ts = Math.floor(Date.now() / 1000);
         const readable = new Date(ts * 1000)
@@ -125,6 +126,76 @@ export async function recordPixelUpdate(
     }
 }
 
+function applyDeltaString(key: string, delta: string): string {
+    for (const pixel of delta.split(",")) {
+        const [numStr, colour] = pixel.split(":");
+        const num = Number(numStr);
+        key = key.slice(0, num * 6) + colour! + key.slice(num * 6 + 6);
+    }
+    return key;
+}
+
+/**
+ * Atomically applies pixel deltas on top of the canvas's latest stored state
+ * and returns the merged key. fallbackKey is used if history is empty.
+ */
+export async function applyPixelUpdate(
+    messageId: string,
+    deltas: string[],
+    userId: string,
+    fallbackKey: string,
+): Promise<string> {
+    const client = await pool.connect();
+    try {
+        await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [messageId]);
+
+        const { rows } = await client.query<{
+            row_id: number;
+            key: string;
+            is_delta: boolean;
+        }>(
+            `SELECT row_id, key, is_delta FROM timelapse
+             WHERE message_id = $1
+               AND row_id >= COALESCE(
+                   (SELECT MAX(row_id) FROM timelapse
+                    WHERE message_id = $1 AND NOT is_delta), 0)
+             ORDER BY row_id`,
+            [messageId],
+        );
+
+        let key = fallbackKey;
+        for (const row of rows) {
+            key = row.is_delta ? applyDeltaString(key, row.key) : row.key;
+        }
+
+        const delta = deltas.join(",");
+        const newKey = applyDeltaString(key, delta);
+        const rowId = rows.length ? rows[rows.length - 1]!.row_id + 1 : 0;
+        const isFull = rowId === 0 || rowId % 10 === 0;
+
+        const ts = Math.floor(Date.now() / 1000);
+        const readable = new Date(ts * 1000)
+            .toISOString()
+            .replace("T", " ")
+            .substring(0, 19);
+
+        await client.query(
+            `INSERT INTO timelapse (message_id, row_id, key, is_delta, user_id, timestamp, readable_time)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [messageId, rowId, isFull ? newKey : delta, !isFull, userId, ts, readable],
+        );
+
+        await client.query("COMMIT");
+        return newKey;
+    } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
 export async function getCanvasHistory(
     messageId: string,
 ): Promise<CanvasHistoryRow[]> {
@@ -144,6 +215,7 @@ export async function revertLastPixel(
     const client = await pool.connect();
     try {
         await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [messageId]);
 
         const histResult = await client.query<CanvasHistoryRow>(
             `SELECT row_id, key, is_delta, user_id, timestamp, readable_time

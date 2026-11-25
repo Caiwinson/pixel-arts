@@ -101,44 +101,40 @@ export async function createCommandExecute(
     }
 
     if (baseColour === "custom") {
-        // id = random number
-        const id = Math.floor(Math.random() * 1000000);
-        const modal = createColourModal(id);
-        await interaction.showModal(modal);
-        let hasSubmitted = false;
+        const id = Math.floor(Math.random() * 1_000_000);
+        await interaction.showModal(createColourModal(id));
 
+        let submitted: ModalSubmitInteraction;
         try {
-            // Wait for the user to submit the modal
-            const submitted = await interaction.awaitModalSubmit({
+            submitted = await interaction.awaitModalSubmit({
                 filter: (i) =>
                     i.user.id === interaction.user.id &&
-                    i.customId === `cm:${id}`, // ensure it's the correct modal
-                time: 60_000, // wait up to 60 seconds
+                    i.customId === `cm:${id}`,
+                time: 60_000,
             });
-            hasSubmitted = true;
-
-            const hexInput = submitted.fields.getTextInputValue("hex_input");
-
-            // Basic hex validation
-            if (!/^([0-9A-Fa-f]{6})$/.test(hexInput)) {
-                await submitted.reply({
-                    content:
-                        "Invalid HEX code. Please enter 6 hexadecimal characters.",
-                    flags: MessageFlags.Ephemeral,
-                });
-                return;
-            }
-
-            baseColour = hexInput.toLowerCase();
-            interaction = submitted;
         } catch {
-            if (hasSubmitted) {
-                return interaction.followUp({
+            await interaction
+                .followUp({
                     content: "You did not submit a colour in time.",
                     flags: MessageFlags.Ephemeral,
-                });
-            }
+                })
+                .catch(() => {});
+            return;
         }
+
+        const hexInput = submitted.fields.getTextInputValue("hex_input");
+
+        if (!/^([0-9A-Fa-f]{6})$/.test(hexInput)) {
+            await submitted.reply({
+                content:
+                    "Invalid HEX code. Please enter 6 hexadecimal characters.",
+                flags: MessageFlags.Ephemeral,
+            });
+            return;
+        }
+
+        baseColour = hexInput.toLowerCase();
+        interaction = submitted;
     }
 
     const key = baseColour.repeat(size ** 2);

@@ -16,7 +16,7 @@ import {
     getStringSelectById,
 } from "../../utils.js";
 import { createColourMenu, getColourList } from "./colour.js";
-import { recordPixelUpdate, getUserColour } from "../../../database.js";
+import { applyPixelUpdate, getUserColour } from "../../../database.js";
 import { parseCanvasState } from "../canvas/advance.js";
 import type { Coordinate, ToolModalResult } from "../../../types.js";
 
@@ -199,18 +199,17 @@ async function updateCanvas(
     deltas: string[],
     showsPlot: boolean,
 ): Promise<void> {
-    const embeds = await createCanvasEmbed(key, showsPlot);
+    const mergedKey = await applyPixelUpdate(
+        submitted.message!.id,
+        deltas,
+        submitted.user.id,
+        key,
+    );
+    const embeds = await createCanvasEmbed(mergedKey, showsPlot);
 
     await submitted.editReply({
         embeds: [embeds],
     });
-
-    await recordPixelUpdate(
-        submitted.message!.id,
-        key,
-        deltas.join(","),
-        submitted.user.id,
-    );
 }
 
 function setPixel(
@@ -549,7 +548,7 @@ async function handleReplaceColour(interaction: StringSelectMenuInteraction) {
 }
 
 async function handlePlot(interaction: StringSelectMenuInteraction) {
-    const allowed = ensureOwner(
+    const allowed =await ensureOwner(
         interaction,
         interaction.message,
         "You cannot toggle plots on this canvas.",
