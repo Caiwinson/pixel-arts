@@ -131,15 +131,14 @@ async function createToolModal(
 }
 
 export function parseCoords(coordStr: string, size: number): Coordinate | null {
-    const parts = coordStr.split(",");
-    if (parts.length !== 2) return null;
+    // Digits and a single comma only — rejects decimals, signs, exponents, spaces
+    const m = /^(\d+),(\d+)$/.exec(coordStr);
+    if (!m) return null;
 
-    const x = Number(parts[0]!.trim()) - 1;
-    const y = Number(parts[1]!.trim()) - 1;
+    const x = parseInt(m[1]!, 10) - 1;
+    const y = parseInt(m[2]!, 10) - 1;
 
     if (
-        Number.isNaN(x) ||
-        Number.isNaN(y) ||
         x < 0 ||
         x >= size ||
         y < 0 ||

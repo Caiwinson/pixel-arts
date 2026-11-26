@@ -209,6 +209,15 @@ export async function getCanvasHistory(
     return result.rows;
 }
 
+/** Number of history rows — equals the frame count of the base timelapse. */
+export async function getCanvasHistoryCount(messageId: string): Promise<number> {
+    const result = await pool.query<{ count: string }>(
+        `SELECT COUNT(*) AS count FROM timelapse WHERE message_id = $1`,
+        [messageId],
+    );
+    return parseInt(result.rows[0]?.count ?? "0", 10);
+}
+
 export async function revertLastPixel(
     messageId: string,
 ): Promise<string | null> {

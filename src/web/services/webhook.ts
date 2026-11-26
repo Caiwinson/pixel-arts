@@ -12,10 +12,7 @@ function isSha256(value: string): boolean {
  * Sends a message to the configured webhook URL asynchronously using discord.js
  */
 export async function sendWebhookMessage(content: string): Promise<void> {
-    if (!WEBHOOK_URL) {
-        console.warn("Webhook URL not configured. Skipping webhook send.");
-        return;
-    }
+    if (!WEBHOOK_URL) return;
 
     // Discord.js WebhookClient can take a full URL
     const webhook = new WebhookClient({ url: WEBHOOK_URL });

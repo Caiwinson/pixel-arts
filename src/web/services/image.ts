@@ -7,6 +7,40 @@ import { execFile } from "child_process";
 const PIXEL_RENDER_BIN =
     process.env.PIXEL_RENDER_BIN ?? "/usr/local/bin/pixel-render";
 
+// ---- Concurrency cap for pixel-render ----
+
+const MAX_CONCURRENT_RENDERS = 4;
+
+let activeRenders = 0;
+const renderWaiters: Array<() => void> = [];
+
+async function acquireRenderSlot(): Promise<void> {
+    if (activeRenders < MAX_CONCURRENT_RENDERS) {
+        activeRenders++;
+        return;
+    }
+    await new Promise<void>((resolve) => renderWaiters.push(resolve));
+}
+
+function releaseRenderSlot(): void {
+    const next = renderWaiters.shift();
+    if (next) next(); // slot handed straight to the next waiter
+    else activeRenders--;
+}
+
+async function renderPng(
+    code: string,
+    size: number,
+    plot: boolean,
+): Promise<Buffer> {
+    await acquireRenderSlot();
+    try {
+        return await hexStringToCanvas(code, size, plot);
+    } finally {
+        releaseRenderSlot();
+    }
+}
+
 /**
  * Calls the Rust pixel-render binary. When `plot` is true, the overlay
  * grid is composited in Rust (it's baked into the binary at compile time)
@@ -73,7 +107,7 @@ export async function generateImageData(
 
     if (!basePng) {
         console.info(`Generating base image for hash: ${imgHash}`);
-        basePng = await hexStringToCanvas(code, size, false);
+        basePng = await renderPng(code, size, false);
         storeImageInCache(NO_PLOT_DIR, imgHash, basePng);
         sendWebhookMessage(size <= 15 ? code : imgHash);
     }
@@ -88,7 +122,7 @@ export async function generateImageData(
 
     if (!plottedPng) {
         console.info(`Generating plotted image for hash: ${imgHash}`);
-        plottedPng = await hexStringToCanvas(code, size, true);
+        plottedPng = await renderPng(code, size, true);
         storeImageInCache(PLOT_DIR, imgHash, plottedPng);
     }
 

@@ -9,7 +9,7 @@ import fs from "fs";
 import rateLimit from "express-rate-limit";
 import { PREVIEW_PATH } from "../../constants.js";
 import { generateDownloadVideo } from "../services/video.js";
-import { getCanvasHistory } from "../../database.js";
+import { getCanvasHistory, getCanvasHistoryCount } from "../../database.js";
 
 const videoRouter = Router();
 
@@ -88,6 +88,15 @@ videoRouter.get("/download/:code", downloadLimiter, (async (
     // Use only the captured groups — taint is broken here
     const vid = m[1]!;
     const speed = m[2] ? parseInt(m[2], 10) : 1;
+
+    // Max speed is the frame count of the original video (1 frame per history row)
+    if (speed > 1) {
+        const frames = await getCanvasHistoryCount(vid);
+        if (speed > frames) {
+            res.status(400).send("Invalid speed");
+            return;
+        }
+    }
 
     const { outputPath, error } = await generateDownloadVideo(vid, speed);
 
